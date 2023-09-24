@@ -9,9 +9,9 @@ int main(int argc, char *argv[])
 
     lulm_ppl_init(model_dir);
 
-    float loss = lulm_ppl_loss("我是");
+    float loss = lulm_ppl_compute("我是中国人");
 
-    std::cout << "loss is " << loss << std::endl;
+    std::cout << "sentence ppl is " << loss << std::endl;
 
 
     return 0;

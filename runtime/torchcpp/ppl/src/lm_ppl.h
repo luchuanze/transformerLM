@@ -6,6 +6,6 @@
 
 int lulm_ppl_init(const char* model_dir);
 
-float lulm_ppl_loss(const std::string& text);
+float lulm_ppl_compute(const std::string& text);
 
 #endif //LULM_PPL_H_

@@ -14,22 +14,19 @@ int lulm_ppl_init(const char* model_dir)
     std::string modelDir = std::string(model_dir);
     std::string modelPath = modelDir + "/final.jit";
     std::string dictPath = modelDir + "/lang_char.txt";
-
     lm_model->Read(modelPath, 4);
-    std::cout << "xxxx" << std::endl;
     lm_dict->Read(dictPath);
-    std::cout << "yyyy" << std::endl;
     lm_resource->model = lm_model;
     lm_resource->symbol_table = lm_dict; 
 
     return 0;
 }
 
-float lulm_ppl_loss(const std::string& text)
+float lulm_ppl_compute(const std::string& text)
 {
     lulm::TorchLmInference inf =  lulm::TorchLmInference(lm_resource);
 
-    float loss = inf.Loss(text);
+    float loss = inf.Ppl(text);
     
     return loss;
 }

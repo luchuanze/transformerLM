@@ -8,14 +8,14 @@ import torch
 
 
 def load_checkpoint(model: torch.nn.Module, path: str) -> dict:
-    # if torch.cuda.is_available():
-    #     logging.info('checkpoint loading from %s for gpu' % path)
-    #     checkpoint = torch.load(path)
-    # else:
-    #     logging.info('checkpoint loading from %s for cpu' % path)
-    #     checkpoint = torch.load(path, map_location='cpu')
+    if torch.cuda.is_available():
+        logging.info('checkpoint loading from %s for gpu' % path)
+        checkpoint = torch.load(path)
+    else:
+        logging.info('checkpoint loading from %s for cpu' % path)
+        checkpoint = torch.load(path, map_location='cpu')
 
-    checkpoint = torch.load(path, map_location='cpu')
+    # checkpoint = torch.load(path, map_location='cpu')
 
     model.load_state_dict(checkpoint)
 

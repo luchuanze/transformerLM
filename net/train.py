@@ -10,9 +10,10 @@ from torch.nn.utils import clip_grad_norm_
 
 from dataset.dataset import TextDataset
 from dataset.dataset import read_symbol_table
-from model import create_model, criterion, add_sos_eos
+from model import create_model, criterion, add_sos_eos, criterion2
 from checkpoint import save_checkpoint
-
+from torch.optim.lr_scheduler import _LRScheduler
+from checkpoint import load_checkpoint
 
 
 def get_args():
@@ -24,7 +25,6 @@ def get_args():
     parser.add_argument('--model_dir', required=True, help='save model dir')
     parser.add_argument('--pin_memory', action='store_true', default=False, help='Use pinned memory buffers used for reading')
     parser.add_argument('--num_workers', type=int, default=0, help='num of subprocess workers for processing data')
-    parser.add_argument('--cmvn', default=None, help='global cmvn file')
     parser.add_argument('--symbol_table', required=True, help='model unit symbol')
     parser.add_argument('--checkpoint', default=None, help='checkpoint model')
     parser.add_argument('--ddp.rank',
@@ -52,11 +52,57 @@ def get_args():
     return args
 
 
+class WarmupLR(_LRScheduler):
+    """The WarmupLR scheduler
+
+    This scheduler is almost same as NoamLR Scheduler except for following
+    difference:
+
+    NoamLR:
+        lr = optimizer.lr * model_size ** -0.5
+             * min(step ** -0.5, step * warmup_step ** -1.5)
+    WarmupLR:
+        lr = optimizer.lr * warmup_step ** 0.5
+             * min(step ** -0.5, step * warmup_step ** -1.5)
+
+    Note that the maximum lr equals to optimizer.lr in this scheduler.
+
+    """
+
+    def __init__(
+        self,
+        optimizer: torch.optim.Optimizer,
+        warmup_steps: int = 25000,
+        last_epoch: int = -1,
+    ):
+        # assert check_argument_types()
+        self.warmup_steps = warmup_steps
+
+        # __init__() must be invoked before setting field
+        # because step() is also invoked in __init__()
+        super().__init__(optimizer, last_epoch)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(warmup_steps={self.warmup_steps})"
+
+    def get_lr(self):
+        step_num = self.last_epoch + 1
+        return [
+            lr
+            * self.warmup_steps ** 0.5
+            * min(step_num ** -0.5, step_num * self.warmup_steps ** -1.5)
+            for lr in self.base_lrs
+        ]
+
+    def set_step(self, step: int):
+        self.last_epoch = step
+
+
 class Executor:
     def __init__(self):
         self.step = 0
 
-    def train(self, model, optimizer, data_loader, device, epoch, configs):
+    def train(self, model, optimizer, scheduler, data_loader, device, epoch, configs):
         ''' Train one epoch
         '''
         model.train()
@@ -89,10 +135,12 @@ class Executor:
             # if torch.isfinite(grad_norm):
             #     optimizer.step()
             optimizer.step()
+            scheduler.step()
             if batch_idx % log_interval == 0:
+                lr = optimizer.param_groups[0]['lr']
                 logging.debug(
-                    'TRAIN Batch {}/{} loss {:.8f} '.format(
-                        epoch, batch_idx, loss.item()))
+                    'TRAIN Batch {}/{} loss {:.8f} lr {}'.format(
+                        epoch, batch_idx, loss.item(), lr))
 
     def cv(self, model, data_loader, device,  epoch, configs):
         ''' Cross validation on
@@ -119,14 +167,15 @@ class Executor:
                 src, dest = add_sos_eos(target, sos, eos, -1)
                 target_lengths = target_lengths + 1
                 logits = model(src, target_lengths)
-                loss = criterion(logits, dest)
-                if torch.isfinite(loss):
+                loss = criterion2(logits, dest)
+                loss_mean = loss[:-1].mean()
+                if torch.isfinite(loss_mean):
                     num_seen_utts += num_utts
-                    total_loss += loss.item() * num_utts
+                    total_loss += loss_mean.item() * num_utts
                 if batch_idx % log_interval == 0:
                     logging.debug(
                         'CV Batch {}/{} loss {:.8f} history loss {:.8f}'
-                        .format(epoch, batch_idx, loss.item(),
+                        .format(epoch, batch_idx, loss_mean.item(),
                                 total_loss / num_seen_utts))
         print(num_seen_utts)
         return total_loss / num_seen_utts
@@ -172,6 +221,13 @@ def main():
     num_params = sum(p.numel() for p in model.parameters())
     print('the number of model params: {}'.format(num_params))
 
+    if args.checkpoint is not None:
+        load_checkpoint(model, args.checkpoint)
+
+    # start_epoch = infos.get('epoch', -1) + 1
+    # cv_loss = infos.get('cv_loss', 0.0)
+    # step = infos.get('step', -1)
+
     if args.rank == 0:
         script_model = torch.jit.script(model)
         script_model.save(os.path.join(args.model_dir, 'init.zip'))
@@ -193,25 +249,27 @@ def main():
         model = model.to(device)
 
     optimizer = optim.Adam(model.parameters(), **configs['optim_conf'])
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        mode='min',
-        factor=0.5,
-        patience=3,
-        min_lr=1e-6,
-        threshold=0.01
-    )
+    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    #     optimizer,
+    #     mode='min',
+    #     factor=0.5,
+    #     patience=3,
+    #     min_lr=1e-6,
+    #     threshold=0.01
+    # )
+
+    scheduler = WarmupLR(optimizer, **configs['scheduler_conf'])
 
     executor = Executor()
 
     for epoch in range(start_epoch, num_epochs):
         train_dataset.set_epoch(epoch)
         lr = optimizer.param_groups[0]['lr']
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.96, last_epoch=-1)
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.96, last_epoch=-1)
         logging.info('Epoch {} train info lr {}'.format(epoch, lr))
-        executor.train(model, optimizer, train_data_loader, device, epoch, configs)
+        executor.train(model, optimizer, scheduler, train_data_loader, device, epoch, configs)
         cv_loss = executor.cv(model, cv_data_loader, device, epoch, configs)
-        scheduler.step()
+        # scheduler.step()
         print(cv_loss)
         if args.rank == 0:
             save_model_path = os.path.join(args.model_dir, '{}.pt'.format(epoch))

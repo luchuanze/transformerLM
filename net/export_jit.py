@@ -14,6 +14,7 @@ def get_args():
     parser.add_argument('--dict_file', required=True, help='dict file')
     parser.add_argument('--checkpoint', required=True, help='model checkpoint')
     parser.add_argument('--output_file', required=True, help='output_file')
+    parser.add_argument('--output_quant_file', required=True, help='output_file')
 
     args = parser.parse_args()
     return args
@@ -39,6 +40,16 @@ def main():
     script_model.save(args.output_file)
 
     print('Export script model {}'.format(args.output_file))
+
+    if args.output_quant_file:
+        quantized_model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.Linear}, dtype=torch.qint8
+        )
+        print(quantized_model)
+        script_quant_model = torch.jit.script(quantized_model)
+        script_quant_model.save(args.output_quant_file)
+        print('Export quantized model successfully, '
+              'see {}'.format(args.output_quant_file))
 
 
 if __name__ == '__main__':

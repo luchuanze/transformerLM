@@ -232,6 +232,42 @@ def make_pad_mask(lengths: torch.Tensor, max_len: int = 0) -> torch.Tensor:
     return mask
 
 
+def subsequent_mask(
+        size: int,
+        device: torch.device = torch.device("cpu"),
+) -> torch.Tensor:
+    """Create mask for subsequent steps (size, size).
+
+    This mask is used only in decoder which works in an auto-regressive mode.
+    This means the current step could only do attention with its left steps.
+
+    In encoder, fully attention is used when streaming is not necessary and
+    the sequence is not long. In this  case, no attention mask is needed.
+
+    When streaming is need, chunk-based attention is used in encoder. See
+    subsequent_chunk_mask for the chunk-based attention mask.
+
+    Args:
+        size (int): size of mask
+        str device (str): "cpu" or "cuda" or torch.Tensor.device
+        dtype (torch.device): result dtype
+
+    Returns:
+        torch.Tensor: mask
+
+    Examples:
+        >>> subsequent_mask(3)
+        [[1, 0, 0],
+         [1, 1, 0],
+         [1, 1, 1]]
+    """
+    arange = torch.arange(size, device=device)
+    mask = arange.expand(size, size)
+    arange = arange.unsqueeze(-1)
+    mask = mask <= arange
+    return mask
+
+
 class TransformerEncoder(nn.Module):
 
     def __init__(self,
@@ -256,9 +292,20 @@ class TransformerEncoder(nn.Module):
             pos_enc = None
         # pos_enc = PositionalEncoding
 
-        self.embedding = nn.Sequential(
+        # self.embedding = nn.Sequential(
+        #     nn.Embedding(input_size, output_size, padding_idx=padding_idx),
+        #     pos_enc(output_size, positional_dropout_rate)
+        # )
+        #
+
+        # self.embedding = nn.Embedding(input_size, output_size, padding_idx=padding_idx)
+
+        self.embedding = torch.nn.Sequential(
             nn.Embedding(input_size, output_size, padding_idx=padding_idx),
-            pos_enc(output_size, positional_dropout_rate)
+            torch.nn.Linear(output_size, output_size),
+            torch.nn.LayerNorm(output_size),
+            torch.nn.Dropout(dropout_rate),
+            torch.nn.ReLU(),
         )
 
         self.encoders = nn.ModuleList([
@@ -280,9 +327,16 @@ class TransformerEncoder(nn.Module):
                 ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         T = x.size(1)
-        mask = ~make_pad_mask(x_lens, T).unsqueeze(1)
-        # x = self.embedding[0](x)
-        x, pos_emb = self.embedding(x)
+        pad_mask = ~make_pad_mask(x_lens, T).unsqueeze(1)
+        # m: (1, L, L)
+        sub_mask = subsequent_mask(pad_mask.size(-1),
+                            device=pad_mask.device).unsqueeze(0)
+        # mask: (B, L, L)
+        mask = pad_mask & sub_mask
+
+        # mask = pad_mask
+        # x, pos_emb = self.embedding(x)
+        x = self.embedding(x)
 
         for block in self.encoders:
             x, mask = block(x, mask)
@@ -305,12 +359,12 @@ class TransformerLM(nn.Module):
                                           num_blocks=num_layers,
                                           dropout_rate=dropout)
 
- #       self.rnn = nn.LSTM(input_size=embed_size,
- #                         hidden_size=300,
- #                          num_layers=1,
- #                          bidirectional=False,
- #                          dropout=dropout,
- #                          batch_first=True)
+        # self.rnn = nn.LSTM(input_size=embed_size,
+        #                  hidden_size=300,
+        #                   num_layers=1,
+        #                   bidirectional=False,
+        #                   dropout=dropout,
+        #                   batch_first=True)
 
         self.project = nn.Linear(embed_size, vocab_size)
 
@@ -318,7 +372,7 @@ class TransformerLM(nn.Module):
 
         x, mask = self.encoder(input, input_lens)
 
-        #xo, _ = self.rnn(x)
+        # xo, _ = self.rnn(x)
 
         logits = self.project(x)
 

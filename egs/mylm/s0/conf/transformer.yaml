@@ -1,11 +1,11 @@
 # network architecture
 
 model_conf:
-    embed_size: 256
+    embed_size: 512
     hidden_size: 512
     linear_units: 2048
-    attention_heads: 4
-    num_layers: 6
+    attention_heads: 8
+    num_layers: 12
     dropout: 0.1
     self_attention_dropout_rate: 0.0
 
@@ -21,7 +21,7 @@ dataset_conf:
         sort_size: 500  # sort_size should be less than shuffle_size
     batch_conf:
         batch_type: 'static' # static or dynamic
-        batch_size: 32
+        batch_size: 160
 
 grad_clip: 5
 accum_grad: 4

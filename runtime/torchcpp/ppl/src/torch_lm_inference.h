@@ -29,7 +29,7 @@ namespace lulm {
         public:
         TorchLmInference(std::shared_ptr<InferenceResoure> resource);
 
-        float Loss(std::string text);
+        float Ppl(std::string text);
 
         std::shared_ptr<TorchLmModel> model_;
         std::shared_ptr<SymbolTable> symbol_table_;

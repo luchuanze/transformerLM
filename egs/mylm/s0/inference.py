@@ -12,10 +12,10 @@ import torch
 
 def main():
 
-    test_text = "我是"
-    checkpoint = "exp/transformer2/2.pt"
+    test_text = "金鸡湖在什么地方"
+    checkpoint = "exp/transformer5/100.pt"
     config_file = "conf/transformer.yaml"
-    dict_file = 'data/dict/lang_char2.txt'
+    dict_file = 'data/dict/lang_char.txt'
     use_gpu = True
     with open(config_file, 'r') as fin:
         configs = yaml.load(fin, Loader=yaml.FullLoader)
@@ -38,7 +38,9 @@ def main():
     x, x_len = input_tokenizer(symbol_table, test_text, device)
     loss = 1.0
     with torch.no_grad():
-        loss = model.inference_loss(x, x_len, sos_id, eos_id)
+        loss = model.inference_ppl(x, x_len, sos_id, eos_id)
+
+
 
     print(loss)
 

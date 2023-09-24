@@ -27,6 +27,22 @@ endif()
 
 # third_party: libtorch use FetchContent_Declare to download, and
 # use find_package to find since libtorch is not a standard cmake project
+
+# set(PYTORCH_VERSION "1.13.0")
+# if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+#     set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-${PYTORCH_VERSION}%2Bcpu.zip")
+#     set(URL_HASH "SHA256=d7043b7d7bdb5463e5027c896ac21b83257c32c533427d4d0d7b251548db8f4b")
+#     set(CMAKE_BUILD_TYPE "Release")
+# elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+#     set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cu116/libtorch-cxx11-abi-shared-with-deps-${PYTORCH_VERSION}%2Bcu116.zip")
+#     set(URL_HASH "SHA256=03812a3b2981a02f8cb276271201637c16df66ceb96182e6b383c067ea6dc154")
+# elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+#     set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cpu/libtorch-macos-${PYTORCH_VERSION}.zip")
+#     set(URL_HASH "SHA256=07cac2c36c34f13065cb9559ad5270109ecbb468252fb0aeccfd89322322a2b5")
+# else()
+#     message(FATAL_ERROR "Unsupported CMake System Name '${CMAKE_SYSTEM_NAME}' (expected 'Windows', 'Linux' or 'Darwin')")
+# endif()
+
 set(PYTORCH_VERSION "1.13.0")
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-${PYTORCH_VERSION}%2Bcpu.zip")
@@ -34,16 +50,22 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set(CMAKE_BUILD_TYPE "Release")
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-${PYTORCH_VERSION}%2Bcpu.zip")
-    set(URL_HASH "SHA256=6b99edc046f37ad37a3b04dc86663895f10c362af09fdd10884f30360d0ba023")
+    set(URL_HASH "SHA256=d52f63577a07adb0bfd6d77c90f7da21896e94f71eb7dcd55ed7835ccb3b2b59")
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
     set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cpu/libtorch-macos-${PYTORCH_VERSION}.zip")
     set(URL_HASH "SHA256=07cac2c36c34f13065cb9559ad5270109ecbb468252fb0aeccfd89322322a2b5")
 else()
     message(FATAL_ERROR "Unsupported CMake System Name '${CMAKE_SYSTEM_NAME}' (expected 'Windows', 'Linux' or 'Darwin')")
 endif()
+# FetchContent_Declare(libtorch
+#   URL      ${LIBTORCH_URL}
+# )
+
 FetchContent_Declare(libtorch
   URL      ${LIBTORCH_URL}
+  URL_HASH ${URL_HASH}
 )
+
 set(gtest_force_shared_crt ON CACHE BOOL "Always use msvcrt.dll" FORCE)
 FetchContent_MakeAvailable(libtorch)
 find_package(Torch REQUIRED PATHS ${libtorch_SOURCE_DIR} NO_DEFAULT_PATH)
@@ -61,7 +83,7 @@ add_library(lmppl SHARED
  src/lm_ppl.cpp
 )
 
-target_link_libraries(lmppl PUBLIC ${TORCH_LIBRARIES})
+target_link_libraries(lmppl PUBLIC ${TORCH_LIBRARIES} )
 
 add_executable(ppl_test bin/ppl_test.cpp)
 target_link_libraries(ppl_test PUBLIC lmppl)

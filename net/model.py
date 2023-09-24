@@ -7,6 +7,8 @@ from typing import Optional, Tuple, List
 from net.transfomerlm import TransformerLM
 
 from torch.nn.utils.rnn import pad_sequence
+
+
 import numpy as np
 
 
@@ -35,10 +37,34 @@ class LmModel(TransformerLM):
         src_len = x_len + 1
         # with torch.no_grad():
         logits = self.forward(src, src_len)
-        # #     # logits = torch.log_softmax(logits, dim=1)
-        loss = criterion(logits, dest)
+
+        loss = criterion2(logits, dest)
 
         return loss
+
+    @torch.jit.export
+    def inference_ppl(self,
+                       x,
+                       x_len,
+                       sos_id: int = -1,
+                       eos_id: int = -1,
+                       ignore_id: int = -1) -> torch.Tensor:
+        src, dest = add_sos_eos(x, sos_id, eos_id, ignore_id)
+        src_len = x_len + 1
+        # with torch.no_grad():
+        logits = self.forward(src, src_len)
+
+        loss = criterion2(logits, dest)
+
+        print(loss)
+
+        loss_mean = loss[:-1].mean()
+
+        log_base = torch.tensor([10.0], dtype=loss_mean.dtype, device=loss_mean.device)
+
+        ppl = log_base ** (loss_mean /torch.log(log_base))
+
+        return ppl
 
 
 def create_model(configs):
@@ -78,9 +104,10 @@ def input_tokenizer(symbol_table, input_text, device):
 
 def cross_entropy(logits: torch.Tensor,
                   target: torch.Tensor,
-                  ignore_index: int = -1) -> torch.Tensor:
+                  ignore_index: int = -1,
+                  reduction: str = "mean") -> torch.Tensor:
 
-    return nn.functional.cross_entropy(logits, target, ignore_index=ignore_index)
+    return nn.functional.cross_entropy(logits, target, ignore_index=ignore_index, reduction=reduction)
 
 
 def criterion(logits: torch.Tensor,
@@ -98,7 +125,27 @@ def criterion(logits: torch.Tensor,
     # target = target.masked_fill(ignore, 0)
     # true_dist.scatter_(1, target.unsqueeze(1), 1.0 - smoothing)
 
-    loss = cross_entropy(torch.log_softmax(logits, dim=1), target, ignore_index)
+    loss = cross_entropy(torch.log_softmax(logits, dim=1), target, ignore_index, reduction="mean")
+    # loss = cross_entropy(logits, target, ignore_index)
+    return loss
+
+
+def criterion2(logits: torch.Tensor,
+              target: torch.Tensor,
+              ignore_index: int = -1,
+              smoothing: float = 0.1) -> torch.Tensor:
+    class_size = logits.size(2)
+    logits = logits.view(-1, class_size)
+    target = target.view(-1)
+
+    # true_dist = torch.zeros_like(logits)
+    # true_dist.fill_(smoothing/(class_size - 1))
+    # ignore = target == ignore_index
+    # total = len(target) - ignore.sum().item()
+    # target = target.masked_fill(ignore, 0)
+    # true_dist.scatter_(1, target.unsqueeze(1), 1.0 - smoothing)
+
+    loss = cross_entropy(torch.log_softmax(logits, dim=1), target, ignore_index, reduction="none")
     return loss
 
 
@@ -130,6 +177,9 @@ def add_sos_eos(ys_pad: torch.Tensor, sos: int, eos: int,
     ys_in = [torch.cat([_sos, y], dim=0) for y in ys]
     ys_out = [torch.cat([y, _eos], dim=0) for y in ys]
     return pad_list(ys_in, eos), pad_list(ys_out, ignore_id)
+
+
+
 
 
 

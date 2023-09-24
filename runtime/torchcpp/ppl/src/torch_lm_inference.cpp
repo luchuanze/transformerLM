@@ -64,7 +64,7 @@ namespace lulm
 
     }
 
-    float TorchLmInference::Loss(std::string text)
+    float TorchLmInference::Ppl(std::string text)
     {
 
         torch::NoGradGuard no_grad;
@@ -97,7 +97,7 @@ namespace lulm
         //                                           x_len
         //                                           };
 
-        auto loss = model_->torch_model()->get_method("inference_loss")(inputs).toTensor();
+        auto loss = model_->torch_model()->get_method("inference_ppl")(inputs).toTensor();
 
         float* item = loss.data_ptr<float>();
 

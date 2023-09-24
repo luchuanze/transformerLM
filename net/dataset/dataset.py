@@ -62,6 +62,7 @@ class TextData(Dataset):
 
         self.minibatch = []
         num = len(data)
+        print('date len is {}'.format(num))
         assert 'batch_size' in batch_conf
         batch_size = batch_conf['batch_size']
 
