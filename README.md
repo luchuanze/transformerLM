@@ -6,5 +6,7 @@
 安装 pip install torch==1.13.0
 
 训练： 参考 egs/mylm/trian.sh
+
 推理： 参考 egs/mylm/inference.py
-      
+
+runtime:  cd ppl; mkdir build; cmake ..; cmake --build .
