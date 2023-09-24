@@ -9,4 +9,4 @@
 
 推理： 参考 egs/mylm/inference.py
 
-runtime:  cd ppl; mkdir build; cmake ..; cmake --build .
+runtime:  cd runtime/torchcpp/ppl && mkdir build  && cmake ..  && cmake --build .
